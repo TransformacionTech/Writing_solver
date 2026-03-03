@@ -7,12 +7,28 @@ from crewai import Crew
 from agents import researcherAgent, writerAgent, editorAgent, readerAgent, chatAgent
 from tasks import researcherTask, writerTask, editorTask, readerTask
 from validators.postValidator import parsear_output_reader
+from customLlm.llm import create_llm, MODELOS_DISPONIBLES
 
 # ─────────────────────────────────────────────
 # Constantes
 # ─────────────────────────────────────────────
 MAX_REINTENTOS = 3
 TRIGGER = re.compile(r"crea\s+un\s+post\s+(.+)", re.IGNORECASE)
+
+TODOS_LOS_AGENTES = [
+    researcherAgent.researcher,
+    writerAgent.writer,
+    editorAgent.editor,
+    readerAgent.reader,
+    chatAgent.assistant
+]
+
+
+def actualizar_llm(model_name: str) -> None:
+    """Reasigna el LLM a todos los agentes con el modelo seleccionado."""
+    nuevo_llm = create_llm(model_name)
+    for agente in TODOS_LOS_AGENTES:
+        agente.llm = nuevo_llm
 
 # ─────────────────────────────────────────────
 # Detección de intención
@@ -50,7 +66,7 @@ def run_pipeline(tema: str) -> tuple[str, list[str]]:
     crew_fase1 = Crew(
         agents=[researcherAgent.researcher, writerAgent.writer],
         tasks=[researcherTask.researchTask, writerTask.writerTask],
-        verbose=True,
+        verbose=True
     )
     resultado_fase1 = crew_fase1.kickoff(inputs={"topic": tema})
     post_actual = str(resultado_fase1)
@@ -75,12 +91,12 @@ def run_pipeline(tema: str) -> tuple[str, list[str]]:
         crew_fase2 = Crew(
             agents=[editorAgent.editor, readerAgent.reader],
             tasks=[editorTask.editCopyTask, readerTask.readerTask],
-            verbose=True,
+            verbose=True
         )
         crew_fase2.kickoff(inputs={
             "topic": tema,
             "post": post_actual,
-            "feedback": texto_feedback,
+            "feedback": texto_feedback
         })
 
         texto_evaluacion = str(readerTask.readerTask.output.raw) if readerTask.readerTask.output else ""
@@ -140,13 +156,13 @@ def responder_sobre_post(mensaje: str, post_contexto: str, history: list) -> str
             - No generes un nuevo post desde cero a menos que el usuario lo pida explícitamente.
         """,
         agent=chatAgent.assistant,
-        expected_output="Respuesta directa al usuario. Si hay post modificado, incluirlo completo.",
+        expected_output="Respuesta directa al usuario. Si hay post modificado, incluirlo completo."
     )
 
     crew_chat = Crew(
         agents=[chatAgent.assistant],
         tasks=[tarea_chat],
-        verbose=False,
+        verbose=False
     )
     return str(crew_chat.kickoff())
 
@@ -155,7 +171,7 @@ def responder_sobre_post(mensaje: str, post_contexto: str, history: list) -> str
 # Lógica principal de chat (router)
 # ─────────────────────────────────────────────
 
-def chat(mensaje: str, history: list, post_state: str) -> tuple[str, str]:
+def chat(mensaje: str, history: list, post_state: str, modelo: str) -> tuple[str, str]:
     """
     Router:
     - "Crea un post [tema]" → ejecuta el pipeline completo
@@ -164,6 +180,7 @@ def chat(mensaje: str, history: list, post_state: str) -> tuple[str, str]:
     if not mensaje.strip():
         return "Por favor escribe un mensaje.", post_state
 
+    actualizar_llm(modelo)
     tema = detectar_tema(mensaje)
 
     # ── Modo: CREAR POST ─────────────────────────────────────────────────────
@@ -222,6 +239,14 @@ with gr.Blocks(title="✍️ Writing Solver – Tech And Solve") as demo:
         """
     )
 
+    with gr.Row():
+        modelo_selector = gr.Dropdown(
+            choices=MODELOS_DISPONIBLES,
+            value=MODELOS_DISPONIBLES[0],
+            label="🤖 Modelo",
+            scale=2
+        )
+
     chatbot = gr.Chatbot(label="Chat")
 
     with gr.Row():
@@ -229,7 +254,7 @@ with gr.Blocks(title="✍️ Writing Solver – Tech And Solve") as demo:
             placeholder='Escribe "Crea un post sobre [tema]"...',
             scale=8,
             show_label=False,
-            autofocus=True,
+            autofocus=True
         )
         btn = gr.Button("Enviar", variant="primary", scale=1)
 
@@ -243,23 +268,23 @@ with gr.Blocks(title="✍️ Writing Solver – Tech And Solve") as demo:
         label="Ejemplos",
     )
 
-    def responder(mensaje, history, post_state):
-        respuesta, nuevo_state = chat(mensaje, history, post_state)
+    def responder(mensaje, history, post_state, modelo):
+        respuesta, nuevo_state = chat(mensaje, history, post_state, modelo)
         history = history + [
             {"role": "user", "content": mensaje},
-            {"role": "assistant", "content": respuesta},
+            {"role": "assistant", "content": respuesta}
         ]
         return history, nuevo_state, ""
 
     btn.click(
         fn=responder,
-        inputs=[txt, chatbot, post_state],
-        outputs=[chatbot, post_state, txt],
+        inputs=[txt, chatbot, post_state, modelo_selector],
+        outputs=[chatbot, post_state, txt]
     )
     txt.submit(
         fn=responder,
-        inputs=[txt, chatbot, post_state],
-        outputs=[chatbot, post_state, txt],
+        inputs=[txt, chatbot, post_state, modelo_selector],
+        outputs=[chatbot, post_state, txt]
     )
 
 if __name__ == "__main__":
