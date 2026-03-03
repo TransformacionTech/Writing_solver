@@ -3,7 +3,7 @@ from agents import writerAgent
 
 writerTask = Task(
     description = f"""
-        Escribe un post para linkdin adoptando el tono de la empresa {writerAgent.tono} 
+        Escribe un post para LinkedIn adoptando el tono de la empresa {writerAgent.tono} 
         que genere conversación e interacción con aseguradoras como 
         clientes potenciales.
 

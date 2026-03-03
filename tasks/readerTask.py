@@ -1,12 +1,13 @@
 from crewai import Task
-from agents import readerAgent, writerAgent
+from agents import readerAgent
 
 # Define la tarea de lectura y análisis del copy
 readerTask = Task(
-    description = f"""
+    description = """
         Evalúa el copy generado usando los criterios editoriales exactos de
         Tech And Solve. Tu evaluación debe ser objetiva, basada en criterios
-        erificables, no en impresiones generales.
+        verificables, no en impresiones generales y teniendo en cuenta lo que
+        pide el usuario.
 
         CRITERIOS DE EVALUACIÓN (cada uno tiene peso):
 

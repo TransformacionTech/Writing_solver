@@ -23,7 +23,7 @@ writer = Agent(
         como clientes potenciales
         """,
 
-    backstory = 'Escritor profecional especializado en copiwriting comercial B2B con enfoque en linkedin y en Hook irresistible',
+    backstory = 'Escritor profesional especializado en copywriting comercial B2B con enfoque en LinkedIn y en Hook irresistible',
     verbose = True,
     llm = llm.model #Especificar el llm para este agente
 )
