@@ -8,8 +8,9 @@ load_dotenv(override=True)
 # MODELOS DISPONIBLES
 # ============================================
 MODELOS_DISPONIBLES = [
-    "claude-haiku-4-5-20251001",
-    "anthropic/claude-sonnet-4-6"
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-5.2"
 ]
 
 
@@ -17,8 +18,7 @@ def create_llm(model_name: str) -> LLM:
     """Crea una instancia del LLM con el modelo especificado."""
     return LLM(
         model=model_name,
-        temperature=0.7,
-        api_key=os.getenv("ANTHROPIC_API_KEY")
+        api_key=os.getenv("OPENAI_API_KEY")
     )
 
 
