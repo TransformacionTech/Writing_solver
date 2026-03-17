@@ -1,6 +1,8 @@
 # Environments
 .env
 
+# RAG - índice vectorial (se regenera con ingest.py)
+knowledge/chroma_db/
 
 __pycache__/
 **/__pycache__/
