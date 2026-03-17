@@ -4,8 +4,8 @@
 import re
 import gradio as gr
 from crewai import Crew
-from agents import researcherAgent, writerAgent, editorAgent, readerAgent, chatAgent
-from tasks import researcherTask, writerTask, editorTask, readerTask
+from agents import researcherAgent, writerAgent, editorAgent, readerAgent, chatAgent, topicSuggesterAgent
+from tasks import researcherTask, writerTask, editorTask, readerTask, topicSuggesterTask
 from validators.postValidator import parsear_output_reader
 from customLlm.llm import create_llm, MODELOS_DISPONIBLES
 
@@ -14,13 +14,15 @@ from customLlm.llm import create_llm, MODELOS_DISPONIBLES
 # ─────────────────────────────────────────────
 MAX_REINTENTOS = 3
 TRIGGER = re.compile(r"crea\s+un\s+post\s+(.+)", re.IGNORECASE)
+TRIGGER_TEMAS = re.compile(r"sugiere\s+temas?|dame\s+ideas?|qu[eé]\s+temas?", re.IGNORECASE)
 
 TODOS_LOS_AGENTES = [
     researcherAgent.researcher,
     writerAgent.writer,
     editorAgent.editor,
     readerAgent.reader,
-    chatAgent.assistant
+    chatAgent.assistant,
+    topicSuggesterAgent.topicSuggester
 ]
 
 
@@ -33,6 +35,21 @@ def actualizar_llm(model_name: str) -> None:
 # ─────────────────────────────────────────────
 # Detección de intención
 # ─────────────────────────────────────────────
+
+def detectar_sugerencia_temas(mensaje: str) -> bool:
+    """Devuelve True si el usuario pide sugerencias de temas."""
+    return bool(TRIGGER_TEMAS.search(mensaje.strip()))
+
+
+def run_topic_pipeline() -> str:
+    """Ejecuta el agente sugeridor de temas y devuelve las 5 ideas."""
+    crew_temas = Crew(
+        agents=[topicSuggesterAgent.topicSuggester],
+        tasks=[topicSuggesterTask.topicSuggesterTask],
+        verbose=False
+    )
+    return str(crew_temas.kickoff())
+
 
 def detectar_tema(mensaje: str) -> str | None:
     """
@@ -181,6 +198,19 @@ def chat(mensaje: str, history: list, post_state: str, modelo: str) -> tuple[str
         return "Por favor escribe un mensaje.", post_state
 
     actualizar_llm(modelo)
+
+    # ── Modo: SUGERIR TEMAS ──────────────────────────────────────────────────
+    if detectar_sugerencia_temas(mensaje):
+        try:
+            ideas = run_topic_pipeline()
+            respuesta = (
+                f"### 💡 Ideas de Posts para Marketing\n\n{ideas}\n\n"
+                f"---\n📌 Di **\"Crea un post [tema]\"** para generar cualquiera de estas ideas."
+            )
+            return respuesta, post_state
+        except Exception as e:
+            return f"❌ **Error al sugerir temas:**\n\n`{str(e)}`", post_state
+
     tema = detectar_tema(mensaje)
 
     # ── Modo: CREAR POST ─────────────────────────────────────────────────────
@@ -251,12 +281,15 @@ with gr.Blocks(title="✍️ Writing Solver – Tech And Solve") as demo:
 
     with gr.Row():
         txt = gr.Textbox(
-            placeholder='Escribe "Crea un post sobre [tema]"...',
-            scale=8,
+            placeholder='Escribe "Crea un post sobre [tema]" o pide "Sugiere temas"...',
             show_label=False,
             autofocus=True
         )
+
+    with gr.Row():
         btn = gr.Button("Enviar", variant="primary", scale=1)
+        btn_temas = gr.Button("💡 Sugerir temas", variant="secondary", scale=1)
+        btn_rag = gr.Button("🔄 Actualizar DB", variant="secondary", scale=1)
 
     gr.Examples(
         examples=[
@@ -276,6 +309,22 @@ with gr.Blocks(title="✍️ Writing Solver – Tech And Solve") as demo:
         ]
         return history, nuevo_state, ""
 
+    def sugerir_temas(history, post_state, modelo):
+        actualizar_llm(modelo)
+        try:
+            ideas = run_topic_pipeline()
+            respuesta = (
+                f"### 💡 Ideas de Posts para Marketing\n\n{ideas}\n\n"
+                f"---\n📌 Di **\"Crea un post [tema]\"** para generar cualquiera de estas ideas."
+            )
+        except Exception as e:
+            respuesta = f"❌ **Error al sugerir temas:**\n\n`{str(e)}`"
+        history = history + [
+            {"role": "user", "content": "💡 Sugerir temas para marketing"},
+            {"role": "assistant", "content": respuesta}
+        ]
+        return history, post_state
+
     btn.click(
         fn=responder,
         inputs=[txt, chatbot, post_state, modelo_selector],
@@ -285,6 +334,38 @@ with gr.Blocks(title="✍️ Writing Solver – Tech And Solve") as demo:
         fn=responder,
         inputs=[txt, chatbot, post_state, modelo_selector],
         outputs=[chatbot, post_state, txt]
+    )
+    btn_temas.click(
+        fn=sugerir_temas,
+        inputs=[chatbot, post_state, modelo_selector],
+        outputs=[chatbot, post_state]
+    )
+
+    def actualizar_rag(history, post_state):
+        """Ejecuta ingest.py para reindexar los posts de post/ en ChromaDB."""
+        import subprocess, sys
+        try:
+            resultado = subprocess.run(
+                [sys.executable, "knowledge/ingest.py"],
+                capture_output=True, text=True, timeout=120
+            )
+            salida = resultado.stdout.strip() or resultado.stderr.strip()
+            if resultado.returncode == 0:
+                respuesta = f"✅ **Base RAG actualizada.**\n\n```\n{salida}\n```\n\nLos agentes ya pueden consultar los posts indexados."
+            else:
+                respuesta = f"❌ **Error al actualizar la base RAG:**\n\n```\n{salida}\n```"
+        except Exception as e:
+            respuesta = f"❌ **Error inesperado:**\n\n`{str(e)}`"
+        history = history + [
+            {"role": "user", "content": "🔄 Actualizar base RAG"},
+            {"role": "assistant", "content": respuesta}
+        ]
+        return history, post_state
+
+    btn_rag.click(
+        fn=actualizar_rag,
+        inputs=[chatbot, post_state],
+        outputs=[chatbot, post_state]
     )
 
 if __name__ == "__main__":
