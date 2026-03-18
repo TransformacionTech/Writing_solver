@@ -11,8 +11,8 @@ Gancho (1-2 líneas):
 - Evita aperturas genéricas como "En el mundo de los seguros..." o "La transformación digital es..."
 
 Desarrollo (3-5 párrafos cortos):
-- Presenta el problema o contexto con evidencia concreta de la investigación.
-- Introduce el insight central: algo que el lector no esperaba o que reformula cómo ve el problema.
+- Responde literalmente lo que se pidió: si el usuario preguntó "cuáles son", enuméralos con descripción breve de cada uno; si preguntó "qué es", explícalo con ejemplos concretos del sector.
+- Usa los datos de la investigación para enriquecer la respuesta, NO para cambiar el tema hacia análisis estratégico o recomendaciones operativas.
 - Conecta el insight con las implicaciones prácticas para una aseguradora.
 - Cuando uses datos o cifras, cítalos de forma natural e integrada al texto. Ejemplo: "Según McKinsey (2024),..." o "Un estudio de Swiss Re indica que...". No uses notas al pie ni corchetes numéricos: LinkedIn no los renderiza.
 - Si la fuente es una organización reconocida por el sector (Swiss Re, Munich Re, MAPFRE, McKinsey, Deloitte, IAIS, FASECOLDA, etc.), inclúyela siempre: aumenta credibilidad ante la audiencia aseguradora.
