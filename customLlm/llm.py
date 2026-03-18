@@ -4,15 +4,6 @@ import os
 
 load_dotenv(override=True)
 
-# ============================================
-# MODELOS DISPONIBLES (selector UI)
-# ============================================
-MODELOS_DISPONIBLES = [
-    "gpt-5-mini",
-    "gpt-5-nano",
-    "gpt-5.2"
-]
-
 
 def create_llm(model_name: str) -> LLM:
     """Crea una instancia del LLM con el modelo especificado."""
