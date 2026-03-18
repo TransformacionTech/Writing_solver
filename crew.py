@@ -7,7 +7,7 @@ from crewai import Crew
 from agents import researcherAgent, writerAgent, editorAgent, readerAgent, chatAgent, topicSuggesterAgent
 from tasks import researcherTask, writerTask, editorTask, readerTask, topicSuggesterTask
 from validators.postValidator import parsear_output_reader
-from customLlm.llm import create_llm, MODELOS_DISPONIBLES
+from customLlm.llm import create_llm
 
 # ─────────────────────────────────────────────
 # Constantes
@@ -16,21 +16,7 @@ MAX_REINTENTOS = 3
 TRIGGER = re.compile(r"crea\s+un\s+post\s+(.+)", re.IGNORECASE)
 TRIGGER_TEMAS = re.compile(r"sugiere\s+temas?|dame\s+ideas?|qu[eé]\s+temas?", re.IGNORECASE)
 
-TODOS_LOS_AGENTES = [
-    researcherAgent.researcher,
-    writerAgent.writer,
-    editorAgent.editor,
-    readerAgent.reader,
-    chatAgent.assistant,
-    topicSuggesterAgent.topicSuggester
-]
 
-
-def actualizar_llm(model_name: str) -> None:
-    """Reasigna el LLM a todos los agentes con el modelo seleccionado."""
-    nuevo_llm = create_llm(model_name)
-    for agente in TODOS_LOS_AGENTES:
-        agente.llm = nuevo_llm
 
 # ─────────────────────────────────────────────
 # Detección de intención
@@ -172,7 +158,7 @@ def responder_sobre_post(mensaje: str, post_contexto: str, history: list) -> str
             Instrucciones:
             - Si el usuario pide modificar el post, devuelve el post COMPLETO modificado.
             - Si el usuario hace una pregunta, respóndela brevemente.
-            - Mantén siempre el tono de Tech And Solve: {writerAgent.tono}
+            - Mantén siempre el tono de Tech And Solve: profesional, cercano y sin frases vacías.
             - No generes un nuevo post desde cero a menos que el usuario lo pida explícitamente.
         """,
         agent=chatAgent.assistant,
@@ -191,7 +177,7 @@ def responder_sobre_post(mensaje: str, post_contexto: str, history: list) -> str
 # Lógica principal de chat (router)
 # ─────────────────────────────────────────────
 
-def chat(mensaje: str, history: list, post_state: str, modelo: str) -> tuple[str, str]:
+def chat(mensaje: str, history: list, post_state: str) -> tuple[str, str]:
     """
     Router:
     - "Crea un post [tema]" → ejecuta el pipeline completo
@@ -200,7 +186,6 @@ def chat(mensaje: str, history: list, post_state: str, modelo: str) -> tuple[str
     if not mensaje.strip():
         return "Por favor escribe un mensaje.", post_state
 
-    actualizar_llm(modelo)
 
     # ── Modo: SUGERIR TEMAS ──────────────────────────────────────────────────
     if detectar_sugerencia_temas(mensaje):
@@ -272,13 +257,6 @@ with gr.Blocks(title="✍️ Writing Solver – Tech And Solve") as demo:
         """
     )
 
-    with gr.Row():
-        modelo_selector = gr.Dropdown(
-            choices=MODELOS_DISPONIBLES,
-            value=MODELOS_DISPONIBLES[0],
-            label="🤖 Modelo",
-            scale=2
-        )
 
     chatbot = gr.Chatbot(label="Chat")
 
@@ -304,16 +282,148 @@ with gr.Blocks(title="✍️ Writing Solver – Tech And Solve") as demo:
         label="Ejemplos",
     )
 
-    def responder(mensaje, history, post_state, modelo):
-        respuesta, nuevo_state = chat(mensaje, history, post_state, modelo)
-        history = history + [
-            {"role": "user", "content": mensaje},
-            {"role": "assistant", "content": respuesta}
-        ]
-        return history, nuevo_state, ""
+    def responder(mensaje, history, post_state):
+        """
+        Generador Gradio: hace yield del estado actual entre cada operación
+        bloqueante para que el usuario vea el progreso en tiempo real.
+        """
+        if not mensaje.strip():
+            yield history, post_state, ""
+            return
 
-    def sugerir_temas(history, post_state, modelo):
-        actualizar_llm(modelo)
+        new_history = history + [{"role": "user", "content": mensaje}]
+
+        # ── Sugerir temas vía texto ───────────────────────────────────────────
+        if detectar_sugerencia_temas(mensaje):
+            new_history.append({"role": "assistant", "content":
+                "💡 **Buscando temas trending...**\n"
+                "_El TopicSuggester analiza el mercado asegurador en LATAM._"
+            })
+            yield new_history, post_state, ""
+            try:
+                ideas = run_topic_pipeline()
+                respuesta = (
+                    f"### 💡 Ideas de Posts para Marketing\n\n{ideas}\n\n"
+                    f"---\n📌 Di **\"Crea un post [tema]\"** para generar cualquiera."
+                )
+            except Exception as e:
+                respuesta = f"❌ **Error al sugerir temas:**\n\n`{str(e)}`"
+            new_history[-1]["content"] = respuesta
+            yield new_history, post_state, ""
+            return
+
+        # ── Crear post (pipeline completo) ────────────────────────────────────
+        tema = detectar_tema(mensaje)
+        if tema:
+            # — Fase 1: Investigación + Escritura —
+            new_history.append({"role": "assistant", "content":
+                "**🔍 Fase 1/2 — Investigación**\n\n"
+                "El **Researcher** busca datos actuales en la web sobre el tema.\n"
+                "Luego el **Writer** redacta el post con esa información.\n\n"
+                "_Esto puede tardar 30–90 segundos._"
+            })
+            yield new_history, post_state, ""
+
+            try:
+                writerTask.writerTask.context = [researcherTask.researchTask]
+                crew_fase1 = Crew(
+                    agents=[researcherAgent.researcher, writerAgent.writer],
+                    tasks=[researcherTask.researchTask, writerTask.writerTask],
+                    verbose=True
+                )
+                resultado_fase1 = crew_fase1.kickoff(inputs={"topic": tema})
+                post_actual = str(resultado_fase1)
+            except Exception as e:
+                new_history[-1]["content"] = f"❌ **Error en Fase 1:**\n\n`{str(e)}`"
+                yield new_history, post_state, ""
+                return
+
+            # — Fase 2: Edición + Evaluación —
+            readerTask.readerTask.context = [editorTask.editCopyTask]
+            crew_fase2 = Crew(
+                agents=[editorAgent.editor, readerAgent.reader],
+                tasks=[editorTask.editCopyTask, readerTask.readerTask],
+                verbose=True
+            )
+
+            feedback_anterior = ""
+            log = [f"🔍 Investigación completada sobre: _{tema}_", "✍️ Post inicial generado"]
+            post_final = post_actual
+
+            for intento in range(1, MAX_REINTENTOS + 1):
+                new_history[-1]["content"] = (
+                    f"✅ **Fase 1 completa.** Investigación + post inicial listos.\n\n"
+                    f"**✏️ Fase 2/2 — Edición y Evaluación (intento {intento}/{MAX_REINTENTOS})**\n\n"
+                    f"El **Editor** mejora el borrador y el **Reader** evalúa "
+                    f"si suena como un post real de Tech And Solve (score ≥ 8/10 para aprobar).\n\n"
+                    f"_Esto puede tardar 20–40 segundos por intento._"
+                )
+                yield new_history, post_state, ""
+
+                texto_feedback = (
+                    f"Feedback del intento anterior:\n{feedback_anterior}"
+                    if feedback_anterior else ""
+                )
+                crew_fase2.kickoff(inputs={
+                    "topic": tema,
+                    "post": post_actual,
+                    "feedback": texto_feedback
+                })
+
+                texto_evaluacion = str(readerTask.readerTask.output.raw) if readerTask.readerTask.output else ""
+                post_editado = str(editorTask.editCopyTask.output.raw) if editorTask.editCopyTask.output else post_actual
+                evaluacion = parsear_output_reader(texto_evaluacion)
+                calificacion = evaluacion.calificacion
+                estado = "✅ Aprobado" if evaluacion.aprobado else "🔄 Re-intentando..."
+                log.append(f"✏️ Edición #{intento} — Reader: {calificacion}/10 {estado}")
+
+                if evaluacion.aprobado:
+                    post_final = post_editado
+                    break
+
+                feedback_anterior = texto_evaluacion
+                post_actual = post_editado
+
+            proceso = "\n".join(log)
+            respuesta_final = (
+                f"### 📋 Proceso completado\n\n{proceso}\n\n"
+                f"---\n\n"
+                f"### 📝 Post Final Aprobado\n\n{post_final}\n\n"
+                f"---\n💬 Ahora puedes pedirme ajustes sobre el post, o hacer preguntas sobre él."
+            )
+            new_history[-1]["content"] = respuesta_final
+            yield new_history, post_final, ""
+            return
+
+        # ── Conversación sobre el post existente ─────────────────────────────
+        if not post_state:
+            new_history.append({"role": "assistant", "content":
+                'Aún no hay un post generado. '
+                'Di **"Crea un post [tema]"** para que los agentes lo generen.'
+            })
+            yield new_history, post_state, ""
+            return
+
+        new_history.append({"role": "assistant", "content": "💬 **Procesando tu petición...**"})
+        yield new_history, post_state, ""
+
+        try:
+            respuesta = responder_sobre_post(mensaje, post_state, history)
+            nuevo_post = respuesta if len(respuesta) > 100 else post_state
+        except Exception as e:
+            respuesta = f"❌ **Error en el chat:**\n\n`{str(e)}`"
+            nuevo_post = post_state
+
+        new_history[-1]["content"] = respuesta
+        yield new_history, nuevo_post, ""
+
+    def sugerir_temas(history, post_state):
+        new_history = history + [{"role": "user", "content": "💡 Sugerir temas para marketing"}]
+        new_history.append({"role": "assistant", "content":
+            "💡 **Buscando temas trending...**\n"
+            "_El TopicSuggester analiza el mercado asegurador en LATAM._"
+        })
+        yield new_history, post_state
         try:
             ideas = run_topic_pipeline()
             respuesta = (
@@ -322,25 +432,22 @@ with gr.Blocks(title="✍️ Writing Solver – Tech And Solve") as demo:
             )
         except Exception as e:
             respuesta = f"❌ **Error al sugerir temas:**\n\n`{str(e)}`"
-        history = history + [
-            {"role": "user", "content": "💡 Sugerir temas para marketing"},
-            {"role": "assistant", "content": respuesta}
-        ]
-        return history, post_state
+        new_history[-1]["content"] = respuesta
+        yield new_history, post_state
 
     btn.click(
         fn=responder,
-        inputs=[txt, chatbot, post_state, modelo_selector],
+        inputs=[txt, chatbot, post_state],
         outputs=[chatbot, post_state, txt]
     )
     txt.submit(
         fn=responder,
-        inputs=[txt, chatbot, post_state, modelo_selector],
+        inputs=[txt, chatbot, post_state],
         outputs=[chatbot, post_state, txt]
     )
     btn_temas.click(
         fn=sugerir_temas,
-        inputs=[chatbot, post_state, modelo_selector],
+        inputs=[chatbot, post_state],
         outputs=[chatbot, post_state]
     )
 
