@@ -1,5 +1,5 @@
 from crewai import Agent
-from customLlm import llm
+from customLlm.llm import llm_editor
 from knowledge.rag_tool import rag_tool
 
 editor = Agent(
@@ -18,5 +18,5 @@ editor = Agent(
     ),
     tools=[rag_tool],
     verbose=True,
-    llm=llm.model
-)
+    llm=llm_editor
+)

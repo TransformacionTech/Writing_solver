@@ -1,5 +1,5 @@
 from crewai import Agent
-from customLlm import llm
+from customLlm.llm import llm_researcher
 from knowledge.openai_web_search_tool import openai_web_search
 
 researcher = Agent(
@@ -37,5 +37,5 @@ researcher = Agent(
     ),
     tools=[openai_web_search],
     verbose=False,
-    llm=llm.model,
-)
+    llm=llm_researcher,
+)

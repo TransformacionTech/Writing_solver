@@ -1,5 +1,5 @@
 from crewai import Agent
-from customLlm import llm
+from customLlm.llm import llm_reader
 
 reader = Agent(
     role = "Evaluador experto en contenido LinkedIn para el sector asegurador",
@@ -16,5 +16,5 @@ reader = Agent(
         una aseguradora.
         """,
     verbose = True,
-    llm = llm.model #Especificar el llm para este agente
-)
+    llm = llm_reader
+)

@@ -95,6 +95,14 @@ def run_pipeline(tema: str) -> tuple[str, list[str]]:
     # readerTask usa context=[editorTask] para recibir el post del Editor
     readerTask.readerTask.context = [editorTask.editCopyTask]
 
+    # El Crew se construye UNA SOLA VEZ fuera del loop para evitar
+    # overhead de instanciación en cada iteración
+    crew_fase2 = Crew(
+        agents=[editorAgent.editor, readerAgent.reader],
+        tasks=[editorTask.editCopyTask, readerTask.readerTask],
+        verbose=True
+    )
+
     for intento in range(1, MAX_REINTENTOS + 1):
 
         # Construir el texto de feedback para inyectar en la tarea del editor
@@ -105,11 +113,6 @@ def run_pipeline(tema: str) -> tuple[str, list[str]]:
                 f"{feedback_anterior}"
             )
 
-        crew_fase2 = Crew(
-            agents=[editorAgent.editor, readerAgent.reader],
-            tasks=[editorTask.editCopyTask, readerTask.readerTask],
-            verbose=True
-        )
         crew_fase2.kickoff(inputs={
             "topic": tema,
             "post": post_actual,

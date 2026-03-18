@@ -5,7 +5,7 @@ import os
 load_dotenv(override=True)
 
 # ============================================
-# MODELOS DISPONIBLES
+# MODELOS DISPONIBLES (selector UI)
 # ============================================
 MODELOS_DISPONIBLES = [
     "gpt-5-mini",
@@ -22,5 +22,26 @@ def create_llm(model_name: str) -> LLM:
     )
 
 
-# Modelo por defecto
-model = create_llm(MODELOS_DISPONIBLES[0])
+# ============================================
+# LLMs POR ROL — cada agente usa el modelo
+# óptimo para su función
+# ============================================
+
+# Rápido y suficiente: procesa resultados de búsqueda web,
+# no necesita creatividad
+llm_researcher = create_llm("gpt-4o-mini")
+
+# Alta creatividad: escritura de posts con posicionamiento de marca
+llm_writer = create_llm("gpt-5.2")
+
+# Creatividad para edición: mejora estructura, tono y persuasión
+llm_editor = create_llm("gpt-5.2")
+
+# Algo de creatividad: evalúa con criterio editorial, pero sin generar contenido
+llm_reader = create_llm("gpt-4o-mini")
+
+# Chat general y sugeridor de temas
+llm_default = create_llm("gpt-4o-mini")
+
+# Alias legacy (para compatibilidad con módulos que importen `llm.model`)
+model = llm_default

@@ -1,5 +1,5 @@
 from crewai import Agent
-from customLlm import llm
+from customLlm.llm import llm_writer
 from knowledge.rag_tool import rag_tool
 
 writer = Agent(
@@ -65,5 +65,5 @@ writer = Agent(
     ),
     tools=[rag_tool],
     verbose=True,
-    llm=llm.model
+    llm=llm_writer
 )
