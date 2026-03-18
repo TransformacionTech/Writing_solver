@@ -1,6 +1,8 @@
 from crewai import Agent
 from customLlm import llm
 from knowledge.rag_tool import rag_tool
+from knowledge.openai_web_search_tool import openai_web_search
+
 
 topicSuggester = Agent(
     role="Estratega de Contenido para Tech And Solve en LinkedIn",
@@ -20,7 +22,7 @@ topicSuggester = Agent(
         "no temas genéricos de siempre. Conoces el histórico de posts de T&S para "
         "proponer contenido fresco, no repetido."
     ),
-    tools=[rag_tool],
+    tools=[rag_tool, openai_web_search],
     verbose=False,
     llm=llm.model
 )
