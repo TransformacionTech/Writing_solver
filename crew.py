@@ -1,52 +1,20 @@
 # ============================================
 # CREW - Sistema Multi-Agente con Gradio
 # ============================================
-import re
 import gradio as gr
 from crewai import Crew
 from agents import researcherAgent, writerAgent, editorAgent, readerAgent, chatAgent, topicSuggesterAgent
 from tasks import researcherTask, writerTask, editorTask, readerTask, topicSuggesterTask
 from validators.postValidator import parsear_output_reader
 from customLlm.llm import create_llm
+from intent.detector import detectar_tema, detectar_sugerencia_temas
 
 # ─────────────────────────────────────────────
 # Constantes
 # ─────────────────────────────────────────────
 MAX_REINTENTOS = 3
-TRIGGER = re.compile(r"crea\s+un\s+post\s+(.+)", re.IGNORECASE)
-TRIGGER_TEMAS = re.compile(r"sugiere\s+temas?|dame\s+ideas?|qu[eé]\s+temas?", re.IGNORECASE)
 
 
-
-# ─────────────────────────────────────────────
-# Detección de intención
-# ─────────────────────────────────────────────
-
-def detectar_sugerencia_temas(mensaje: str) -> bool:
-    """Devuelve True si el usuario pide sugerencias de temas."""
-    return bool(TRIGGER_TEMAS.search(mensaje.strip()))
-
-
-def run_topic_pipeline() -> str:
-    """Ejecuta el agente sugeridor de temas y devuelve las 5 ideas."""
-    crew_temas = Crew(
-        agents=[topicSuggesterAgent.topicSuggester],
-        tasks=[topicSuggesterTask.topicSuggesterTask],
-        verbose=False
-    )
-    return str(crew_temas.kickoff())
-
-
-def detectar_tema(mensaje: str) -> str | None:
-    """
-    Devuelve el tema si el usuario quiere crear un nuevo post,
-    o None si es una conversación normal sobre el post existente.
-    Ejemplos que activan el pipeline:
-      - "Crea un post sobre APIs abiertas"
-      - "Crea un post modernización digital"
-    """
-    match = TRIGGER.search(mensaje.strip())
-    return match.group(1).strip() if match else None
 
 
 # ─────────────────────────────────────────────
